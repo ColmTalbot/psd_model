@@ -2,6 +2,7 @@ from __future__ import division
 
 from scipy.interpolate import CubicSpline
 from scipy.stats import cauchy
+import numpy as np
 
 from bilby.gw.detector import PowerSpectralDensity
 
