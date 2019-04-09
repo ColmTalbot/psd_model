@@ -1,9 +1,13 @@
 from __future__ import division
 
 from scipy.interpolate import CubicSpline
-from scipy.stats import cauchy
+import numpy as np
 
 from bilby.gw.detector import PowerSpectralDensity
+
+
+def cauchy(f, f0, gamma):
+    return 1 / np.pi / (1 + ((f - f0) / gamma)**2)
 
 
 class SplineLorentzianPSD(PowerSpectralDensity):
@@ -35,14 +39,32 @@ class SplineLorentzianPSD(PowerSpectralDensity):
                  if '{}_spline_frequency'.format(self.name) in key])
 
     @property
-    def spline_frequencies(self):
-        return [self.parameters['{}_spline_frequency_{}'.format(self.name, ii)]
+    def _spline_frequencies_keys(self):
+        try:
+            return self.__spline_frequencies_keys
+        except AttributeError:
+            self.__spline_frequencies_keys = [
+                '{}_spline_frequency_{}'.format(self.name, ii)
                 for ii in range(self.n_points)]
+            return self.__spline_frequencies_keys
+
+    @property
+    def spline_frequencies(self):
+        return [self.parameters[key] for key in self._spline_frequencies_keys]
+
+    @property
+    def _spline_amplitude_keys(self):
+        try:
+            return self.__spline_amplitude_keys
+        except AttributeError:
+            self.__spline_amplitude_keys = [
+                '{}_spline_amplitude_{}'.format(self.name, ii)
+                for ii in range(self.n_points)]
+            return self.__spline_amplitude_keys
 
     @property
     def spline_amplitudes(self):
-        return [self.parameters['{}_spline_amplitude_{}'.format(self.name, ii)]
-                for ii in range(self.n_points)]
+        return [self.parameters[key] for key in self._spline_amplitude_keys]
 
     @property
     def n_lorentzians(self):
@@ -54,31 +76,53 @@ class SplineLorentzianPSD(PowerSpectralDensity):
                  if '{}_lorentzian_frequency'.format(self.name) in key])
 
     @property
+    def _lorentzian_frequencies_keys(self):
+        try:
+            return self.__lorentzian_frequencies_keys
+        except AttributeError:
+            self.__lorentzian_frequencies_keys = [
+                '{}_lorentzian_frequency_{}'.format(self.name, ii)
+                for ii in range(self.n_lorentzians)]
+            return self.__lorentzian_frequencies_keys
+
+    @property
     def lorentzian_frequencies(self):
-        return [
-            self.parameters['{}_lorentzian_frequency_{}'.format(self.name, ii)]
-            for ii in range(self.n_lorentzians)]
+        return [self.parameters[key] for key in self._lorentzian_frequencies_keys]
+
+    @property
+    def _lorentzian_amplitudes_keys(self):
+        try:
+            return self.__lorentzian_amplitudes_keys
+        except AttributeError:
+            self.__lorentzian_amplitudes_keys = [
+                '{}_lorentzian_amplitude_{}'.format(self.name, ii)
+                for ii in range(self.n_lorentzians)]
+            return self.__lorentzian_amplitudes_keys
 
     @property
     def lorentzian_amplitudes(self):
-        return [
-            self.parameters['{}_lorentzian_amplitude_{}'.format(self.name, ii)]
-            for ii in range(self.n_lorentzians)]
+        return [self.parameters[key] for key in self._lorentzian_amplitudes_keys]
+
+    @property
+    def _lorentzian_qualities_keys(self):
+        try:
+            return self.__lorentzians_qualities_keys
+        except AttributeError:
+            self.__lorentzians_qualities_keys = [
+                '{}_lorentzian_quality_{}'.format(self.name, ii)
+                for ii in range(self.n_lorentzians)]
+            return self.__lorentzians_qualities_keys
 
     @property
     def lorentzian_qualities(self):
-        return [
-            self.parameters['{}_lorentzian_quality_{}'.format(self.name, ii)]
-            for ii in range(self.n_lorentzians)]
+        return [self.parameters[key] for key in self._lorentzian_qualities_keys]
 
     def spline(self, frequency_array):
-        spline = 0 * frequency_array
-        if self.n_points == 0:
-            return spline
-        spline += 10 ** CubicSpline(
-            self.spline_frequencies, self.spline_amplitudes)(
-            frequency_array)
-        return spline
+        if self.n_points > 0:
+            return 10 ** CubicSpline(
+                self.spline_frequencies, self.spline_amplitudes)(frequency_array)
+        elif self.n_points is 0:
+            return np.zeros_like(frequency_array)
 
     def lorentzian(self, frequency_array):
         lorentzian = 0 * frequency_array
@@ -95,7 +139,5 @@ class SplineLorentzianPSD(PowerSpectralDensity):
 
     @staticmethod
     def _single_lorentzian(frequency_array, amplitude, quality, location):
-        values = cauchy.pdf(x=frequency_array, loc=location,
-                            scale=quality) * quality * amplitude * np.pi
-        return values
+        return cauchy(f=frequency_array, f0=location, gamma=quality) * amplitude
 
