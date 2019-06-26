@@ -34,7 +34,7 @@ trigger_time = GW150914 - 20
 ifo = bilby.gw.detector.get_interferometer_with_open_data(
     'H1', trigger_time=trigger_time)
 ifo.plot_data(outdir=outdir)
-plt.show()
+
 fixed_spline_points = np.logspace(np.log10(ifo.minimum_frequency),
                                   np.log10(ifo.maximum_frequency), Nsplines)
 print(fixed_spline_points)
@@ -60,7 +60,15 @@ if 'check' in sys.argv:
 #    psd_params[f'{ifo.name}_lorentzian_quality_{ii}'] = 2
 #
 
-fixed_lorentzians_frequencies = [36, 40.75, 60, 120, 180, 332, 502, 991.75]
+#fixed_lorentzians_frequencies = [36, 40.75, 60, 120, 180, 332, 502, 991.75]
+
+fixed_lorentzians_frequencies = [
+    36.0, 41.0, 60.0, 120.0, 136.75, 155.75,
+    180.0, 190.5, 258.25, 299.75, 315.5, 332.0, 374.25, 414.5, 445.75,
+    501.75, 508.75, 539.75, 565.25, 576.5, 589.0, 619.75, 695.5, 734.5,
+    738.75, 757.25, 800.0, 897.25, 910.75, 931.75, 944.5, 956.0, 995.75,
+    1004.5]
+
 fixed_lorentzians_amplitude = [-42] * len(fixed_lorentzians_frequencies)
 fixed_lorentzians_qualitiy = [-1] * len(fixed_lorentzians_frequencies)
 
@@ -104,7 +112,7 @@ for key in psd_params:
             latex_label='{}'.format(' '.join(key.split('_'))))
 
 result = bilby.run_sampler(
-    likelihood=like, priors=priors, sampler='dynesty', nlive=200,
+    likelihood=like, priors=priors, sampler='pymultinest', nlive=200,
     enlarge=1, walks=10,
     outdir=outdir, label=label)
 

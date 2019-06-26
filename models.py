@@ -20,15 +20,38 @@ class SplineLorentzianPSD(PowerSpectralDensity):
         self.parameters = parameters
         self.frequency_array = frequency_array
         PowerSpectralDensity.__init__(self, frequency_array=frequency_array)
-        self.psd_array = (
-                self.spline(self.frequency_array) +
-                self.lorentzian(self.frequency_array))
+        self.psd_array = (self.spline(self.frequency_array) +
+                          self.lorentzian(self.frequency_array))
+        self._cache['parameters'] = dict()
+
+    def _update_cache(self, frequency_array):
+        psd_array = self.power_spectral_density_interpolated(frequency_array)
+        self._cache['psd_array'] = psd_array
+        self._cache['asd_array'] = psd_array**0.5
+        self._cache['frequency_array'] = frequency_array
+        self._cache['parameters'] = self.parameters.copy()
+
+    def get_power_spectral_density_array(self, frequency_array):
+        if self.parameters == self._cache['parameters']:
+            return super(SplineLorentzianPSD, self).get_power_spectral_density_array(
+                frequency_array=frequency_array)
+        else:
+            return 2 * (self.spline(frequency_array=frequency_array) +
+                        self.lorentzian(frequency_array=frequency_array))
+
+    def get_amplitude_spectral_density_array(self, frequency_array):
+        if self.parameters == self._cache['parameters']:
+            return super(SplineLorentzianPSD, self).get_amplitude_spectral_density_array(
+                frequency_array=frequency_array)
+        else:
+            return 2 * (self.spline(frequency_array=frequency_array) +
+                        self.lorentzian(frequency_array=frequency_array))
 
     @property
     def power_spectral_density_interpolated(self):
         return lambda frequency_array: 2 * (
-                self.spline(frequency_array=frequency_array) +
-                self.lorentzian(frequency_array=frequency_array))
+            self.spline(frequency_array=frequency_array) +
+            self.lorentzian(frequency_array=frequency_array))
 
     @property
     def n_points(self):
@@ -79,8 +102,6 @@ class SplineLorentzianPSD(PowerSpectralDensity):
     @property
     def _lorentzian_frequencies_keys(self):
         try:
-            # return self.__lorentzian_frequencies_keys
-        # except AttributeError:
             self.__lorentzian_frequencies_keys = [
                 '{}_lorentzian_frequency_{}'.format(self.name, ii)
                 for ii in range(self.n_lorentzians)]
@@ -95,8 +116,6 @@ class SplineLorentzianPSD(PowerSpectralDensity):
     @property
     def _lorentzian_amplitudes_keys(self):
         try:
-            # return self.__lorentzian_amplitudes_keys
-        # except AttributeError:
             self.__lorentzian_amplitudes_keys = [
                 '{}_lorentzian_amplitude_{}'.format(self.name, ii)
                 for ii in range(self.n_lorentzians)]
@@ -111,8 +130,6 @@ class SplineLorentzianPSD(PowerSpectralDensity):
     @property
     def _lorentzian_qualities_keys(self):
         try:
-            # return self.__lorentzians_qualities_keys
-        # except AttributeError:
             self.__lorentzians_qualities_keys = [
                 '{}_lorentzian_quality_{}'.format(self.name, ii)
                 for ii in range(self.n_lorentzians)]
@@ -126,8 +143,14 @@ class SplineLorentzianPSD(PowerSpectralDensity):
 
     def spline(self, frequency_array):
         if self.n_points > 0:
-            return 10 ** CubicSpline(
-                self.spline_frequencies, self.spline_amplitudes)(frequency_array)
+            if hasattr(self, "_interp"):
+                interp = self._interp
+                interp.y = self.spline_amplitudes
+            else:
+                interp = CubicSpline(self.spline_frequencies,
+                                     self.spline_amplitudes)
+            exponent = interp(frequency_array)
+            return np.power(10, exponent)
         elif self.n_points is 0:
             return np.zeros_like(frequency_array)
 

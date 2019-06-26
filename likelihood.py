@@ -11,15 +11,17 @@ class PSDLikelihood(Likelihood):
             self, parameters=ifo.power_spectral_density.parameters)
         self.ifo = ifo
         self.data = abs(ifo.frequency_domain_strain)**2
+        self.data = self.data[self.ifo.frequency_mask]
         self.weight = 2 / ifo.strain_data.duration
 
     def log_likelihood(self):
         return - np.sum((self.weight * self.data / self.psd +
-                         np.log(2 * np.pi * self.psd))[self.ifo.frequency_mask]) / 2
+                         np.log(2 * np.pi * self.psd))) / 2
 
     @property
     def psd(self):
-        return self.ifo.power_spectral_density_array
+        return self.ifo.power_spectral_density.get_power_spectral_density_array(
+            self.ifo.frequency_array[self.ifo.frequency_mask])
 
     @property
     def asd(self):
