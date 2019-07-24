@@ -10,16 +10,25 @@ class PSDLikelihood(Likelihood):
         Likelihood.__init__(
             self, parameters=ifo.power_spectral_density.parameters)
         self.ifo = ifo
-        self.data = abs(ifo.frequency_domain_strain)**2
+        self.data = abs(ifo.frequency_domain_strain[self.ifo.frequency_mask])**2
+        self._nll = - sum(self.ifo.frequency_mask) / 2 - np.sum(np.log(
+            2 * np.pi * abs(
+                ifo.frequency_domain_strain[self.ifo.frequency_mask])**2))
         self.weight = 2 / ifo.strain_data.duration
 
+    def log_likelihood_ratio(self):
+        return self.log_likelihood() - self.noise_log_likelihood()
+
     def log_likelihood(self):
-        return - np.sum((self.weight * self.data / self.psd +
-                         np.log(2 * np.pi * self.psd))[self.ifo.frequency_mask]) / 2
+        return - np.sum(self.weight * self.data / self.psd +
+                        np.log(2 * np.pi * self.psd))
+
+    def noise_log_likelihood(self):
+        return self._nll
 
     @property
     def psd(self):
-        return self.ifo.power_spectral_density_array
+        return self.ifo.power_spectral_density_array[self.ifo.frequency_mask]
 
     @property
     def asd(self):
@@ -40,7 +49,7 @@ class PSDGravitationalWaveTransient(GravitationalWaveTransient):
         log_l = GravitationalWaveTransient.log_likelihood_ratio(self)
         for ifo in self.interferometers:
             log_l -= np.sum(np.log(2 * np.pi * ifo.power_spectral_density_array[
-                ifo.frequency_mask])) / 2.0
+                ifo.frequency_mask]))
             log_l -= 2. / self.waveform_generator.duration * np.sum(
                 abs(ifo.frequency_domain_strain[ifo.frequency_mask]) ** 2 /
                 ifo.power_spectral_density_array[ifo.frequency_mask])
