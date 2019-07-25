@@ -49,7 +49,7 @@ class PSDGravitationalWaveTransient(GravitationalWaveTransient):
             ifo.power_spectral_density.parameters = self.parameters
 
     def log_likelihood_ratio(self):
-        return self.log_likelihood() - self._nll
+        return self.log_likelihood() - self.noise_log_likelihood()
 
     def log_likelihood(self):
         log_l = GravitationalWaveTransient.log_likelihood_ratio(self)
