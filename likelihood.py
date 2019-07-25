@@ -44,6 +44,12 @@ class PSDGravitationalWaveTransient(GravitationalWaveTransient):
             distance_marginalization=distance_marginalization,
             phase_marginalization=phase_marginalization,
             time_marginalization=time_marginalization)
+        self._nll = np.nan
+        for ifo in self.interferometers:
+            ifo.power_spectral_density.parameters = self.parameters
+
+    def log_likelihood_ratio(self):
+        return self.log_likelihood() - self._nll
 
     def log_likelihood(self):
         log_l = GravitationalWaveTransient.log_likelihood_ratio(self)
@@ -54,3 +60,16 @@ class PSDGravitationalWaveTransient(GravitationalWaveTransient):
                 abs(ifo.frequency_domain_strain[ifo.frequency_mask]) ** 2 /
                 ifo.power_spectral_density_array[ifo.frequency_mask])
         return log_l
+
+    def noise_log_likelihood(self):
+        if np.isnan(self._nll):
+            self._nll = 0
+            for ifo in self.interferometers:
+                self._nll += - sum(ifo.frequency_mask) / 2 - np.sum(
+                    np.log(
+                        2 * np.pi * abs(
+                            ifo.frequency_domain_strain[ifo.frequency_mask]
+                        )**2
+                    )
+                )
+        return self._nll
