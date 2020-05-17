@@ -37,7 +37,7 @@ analysis_data = TimeSeries.fetch_open_data(
 
 ifo = bilby.gw.detector.get_empty_interferometer(detector)
 ifo.set_strain_data_from_gwpy_timeseries(analysis_data)
-ifo.minimum_frequency = 100
+ifo.minimum_frequency = 20
 ifo.maximum_frequency = 2**9
 
 fixed_spline_points = np.logspace(np.log10(ifo.minimum_frequency),
@@ -71,7 +71,7 @@ for ii in range(Nlorentzians):
     latex = f"LA{ii}"
     priors[key] = SpikeAndSlab(
         mix=0.5,
-        slab=Uniform(-50, -40),
+        slab=Uniform(-60, -40),
         name=key,
         latex_label=latex)
 
@@ -80,7 +80,7 @@ for ii in range(Nlorentzians):
     priors[key] = Uniform(
         -2, 1, key, latex_label=latex)
 
-farray = np.linspace(ifo.minimum_frequency, ifo.maximum_frequency, 101)
+farray = np.linspace(ifo.minimum_frequency, ifo.maximum_frequency, 501)
 psd = SplineLorentzianPSD(
     f'{ifo.name}', farray, parameters=priors.sample())
 
@@ -88,14 +88,22 @@ ifo.power_spectral_density = psd
 likelihood = PSDLikelihood(ifo=ifo)
 
 result = bilby.run_sampler(
-    likelihood=likelihood, priors=priors, sampler='pymultinest', nlive=100,
+    likelihood=likelihood, priors=priors, sampler='pymultinest', nlive=250,
     outdir=outdir, label=label, evidence_tolerance=5, multimodal=True)
 
-lorentzian_keys = [key for key in priors.keys() if "lorentzian_frequency" in key]
-result.plot_corner(lorentzian_keys, filename=f"{outdir}/{label}_lorentz_corner")
+if Nlorentzians > 0:
+    lorentzian_keys = [key for key in priors.keys() if "lorentzian_frequency" in key]
+    result.plot_corner(lorentzian_keys, filename=f"{outdir}/{label}_lorentz_freq_corner")
 
-spline_keys = [key for key in priors.keys() if "spline_amplitude" in key]
-result.plot_corner(spline_keys, filename=f"{outdir}/{label}_spline_corner")
+    lorentzian_keys = [key for key in priors.keys() if "lorentzian_amplitude" in key]
+    result.plot_corner(lorentzian_keys, filename=f"{outdir}/{label}_lorentz_amp_corner")
+
+    lorentzian_keys = [key for key in priors.keys() if "lorentzian_quality" in key]
+    result.plot_corner(lorentzian_keys, filename=f"{outdir}/{label}_lorentz_q_corner")
+
+if Nsplines > 0:
+    spline_keys = [key for key in priors.keys() if "spline_amplitude" in key]
+    result.plot_corner(spline_keys, filename=f"{outdir}/{label}_spline_corner")
 
 freq = ifo.frequency_array[ifo.frequency_mask]
 data = ifo.strain_data.frequency_domain_strain[ifo.frequency_mask]

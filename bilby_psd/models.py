@@ -144,13 +144,8 @@ class SplineLorentzianPSD(PowerSpectralDensity):
 
     def spline(self, frequency_array):
         if self.n_points > 0:
-            if hasattr(self, "_interp"):
-                interp = self._interp
-                interp.y = self.spline_amplitudes
-            else:
-                interp = CubicSpline(self.spline_frequencies,
-                                     self.spline_amplitudes)
-                self._interp = interp
+            interp = CubicSpline(self.spline_frequencies,
+                                 self.spline_amplitudes)
             exponent = interp(frequency_array)
             return np.power(10, exponent)
         elif self.n_points == 0:
