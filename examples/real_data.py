@@ -14,6 +14,20 @@ from bilby_psd.models import SplineLorentzianPSD
 from bilby_psd.likelihood import PSDLikelihood
 from bilby_psd.priors_defs import SpikeAndSlab
 
+
+def plot_lorentzians_prior(ifo, lorentzians_frequency_bins, n_overlap, outdir,
+                           label):
+    fig, ax = plt.subplots()
+    ax.loglog(ifo.frequency_array[ifo.frequency_mask],
+              np.abs(ifo.frequency_domain_strain[ifo.frequency_mask]))
+    for ii in range(len(lorentzians_frequency_bins) - n_overlap):
+        ax.axvspan(lorentzians_frequency_bins[ii],
+                   lorentzians_frequency_bins[ii + n_overlap],
+                   color='r', alpha=0.2)
+    ax.set_xlim(ifo.minimum_frequency, ifo.maximum_frequency)
+    fig.savefig(f"{outdir}/{label}_data")
+
+
 Nsplines = int(sys.argv[1])
 Nlorentzians = int(sys.argv[2])
 
@@ -38,7 +52,7 @@ analysis_data = TimeSeries.fetch_open_data(
 ifo = bilby.gw.detector.get_empty_interferometer(detector)
 ifo.set_strain_data_from_gwpy_timeseries(analysis_data)
 ifo.minimum_frequency = 20
-ifo.maximum_frequency = 2**9
+ifo.maximum_frequency = 2**10
 
 fixed_spline_points = np.logspace(np.log10(ifo.minimum_frequency),
                                   np.log10(ifo.maximum_frequency), Nsplines)
@@ -50,37 +64,34 @@ for ii in range(Nsplines):
     latex = f"SA{ii}"
     priors[key] = Uniform(-50, -40, key, latex_label=latex)
 
+n_overlap = 2
 lorentzians_frequency_bins = np.logspace(
-    np.log10(ifo.minimum_frequency),
-    np.log10(ifo.maximum_frequency),
-    1 + Nlorentzians)
+    np.log10(ifo.minimum_frequency), np.log10(ifo.maximum_frequency), Nlorentzians + 2)
+plot_lorentzians_prior(ifo, lorentzians_frequency_bins, n_overlap, outdir, label)
 
 for ii in range(Nlorentzians):
 
     key = f"{ifo.name}_lorentzian_frequency_{ii}"
     latex = f"LF{ii}"
-    # priors[key] = Uniform(
-    #    lorentzians_frequency_bins[ii],
-    #    lorentzians_frequency_bins[ii + 1], key, latex_label=latex)
     priors[key] = Uniform(
-        ifo.minimum_frequency,
-        ifo.maximum_frequency,
-        key, latex_label=latex)
+        lorentzians_frequency_bins[ii],
+        lorentzians_frequency_bins[ii + n_overlap], key, latex_label=latex
+    )
 
     key = f"{ifo.name}_lorentzian_amplitude_{ii}"
     latex = f"LA{ii}"
     priors[key] = SpikeAndSlab(
-        mix=0.5,
-        slab=Uniform(-60, -40),
+        mix=0.1,
+        slab=Uniform(-50, -40),
         name=key,
         latex_label=latex)
 
     key = f"{ifo.name}_lorentzian_quality_{ii}"
     latex = f"LQ{ii}"
     priors[key] = Uniform(
-        -2, 1, key, latex_label=latex)
+        -2, 2, key, latex_label=latex)
 
-farray = np.linspace(ifo.minimum_frequency, ifo.maximum_frequency, 501)
+farray = np.linspace(ifo.minimum_frequency, ifo.maximum_frequency, 101)
 psd = SplineLorentzianPSD(
     f'{ifo.name}', farray, parameters=priors.sample())
 
@@ -88,7 +99,8 @@ ifo.power_spectral_density = psd
 likelihood = PSDLikelihood(ifo=ifo)
 
 result = bilby.run_sampler(
-    likelihood=likelihood, priors=priors, sampler='pymultinest', nlive=250,
+    likelihood=likelihood, priors=priors, sampler='dynesty', nlive=500,
+    dlogz=5, queue_size=6, walks=10, nact=1,
     outdir=outdir, label=label, evidence_tolerance=5, multimodal=True)
 
 if Nlorentzians > 0:
