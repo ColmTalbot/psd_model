@@ -6,35 +6,25 @@ import argparse
 
 import numpy as np
 import bilby
-from bilby.core.prior import Uniform
+from bilby.core.prior import Uniform, TruncatedNormal
 import matplotlib.pyplot as plt
 from gwpy.timeseries import TimeSeries
 
 from bilby_psd.models import SplineLorentzianPSD
 from bilby_psd.likelihood import PSDLikelihood
-from bilby_psd.priors_defs import SpikeAndSlab
-
-
-def plot_lorentzians_prior(ifo, lorentzians_frequency_bins, n_overlap, outdir,
-                           label):
-    fig, ax = plt.subplots()
-    ax.loglog(ifo.frequency_array[ifo.frequency_mask],
-              np.abs(ifo.frequency_domain_strain[ifo.frequency_mask]))
-    for ii in range(len(lorentzians_frequency_bins) - n_overlap):
-        ax.axvspan(lorentzians_frequency_bins[ii],
-                   lorentzians_frequency_bins[ii + n_overlap],
-                   color='r', alpha=0.2)
-    ax.set_xlim(ifo.minimum_frequency, ifo.maximum_frequency)
-    fig.savefig(f"{outdir}/{label}_data")
+from bilby_psd.priors_defs import SpikeAndSlab, MinimumPrior
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--trigger-time', default=1126259462.4)
-parser.add_argument('--duration', default=4)
+parser.add_argument('--duration', default=4, type=int)
 parser.add_argument('-s', '--nsplines', type=int, required=True)
 parser.add_argument('-l', '--nlorentzians', type=int, required=True)
 parser.add_argument('-d', '--detector', type=str, required=True)
 parser.add_argument('--max-frequency', type=int, default=512)
+parser.add_argument('--min-frequency', type=int, default=15)
+parser.add_argument('--min-lorentzian-frequency', type=int, default=20)
+parser.add_argument('--max-lorentzian-frequency', type=int, default=550)
 parser.add_argument('--sampler', type=str, default="dynesty")
 parser.add_argument('--nlive', type=int, default=500)
 parser.add_argument('--cpus', type=int, default=1)
@@ -54,7 +44,7 @@ analysis_data = TimeSeries.fetch_open_data(
 
 ifo = bilby.gw.detector.get_empty_interferometer(args.detector)
 ifo.set_strain_data_from_gwpy_timeseries(analysis_data)
-ifo.minimum_frequency = 20
+ifo.minimum_frequency = args.min_frequency
 ifo.maximum_frequency = args.max_frequency
 
 # Set up spline priors
@@ -68,38 +58,43 @@ for ii in range(args.nsplines):
     priors[f'{ifo.name}_spline_frequency_{ii}'] = fixed_spline_points[ii]
     key = f'{ifo.name}_spline_amplitude_{ii}'
     latex = f"SA{ii}"
-    priors[key] = Uniform(-57, -45, key, latex_label=latex)
+    priors[key] = Uniform(-57, -35, key, latex_label=latex)
 
 # Set up lorentzian priors
-n_overlap = 2
-lorentzians_frequency_bins = np.logspace(
-    np.log10(ifo.minimum_frequency),
-    np.log10(ifo.maximum_frequency),
-    args.nlorentzians + 2)
-
-plot_lorentzians_prior(ifo, lorentzians_frequency_bins, n_overlap, outdir, label)
-
 for ii in range(args.nlorentzians):
-
     key = f"{ifo.name}_lorentzian_frequency_{ii}"
     latex = f"LF{ii}"
-    priors[key] = Uniform(
-        lorentzians_frequency_bins[ii],
-        lorentzians_frequency_bins[ii + n_overlap], key, latex_label=latex
-    )
+    if ii > 0:
+        priors[key] = MinimumPrior(
+            order=args.nlorentzians - ii,
+            duration=args.duration,
+            minimum=args.min_lorentzian_frequency,
+            maximum=args.max_lorentzian_frequency,
+            name=key,
+            latex_label=latex
+        )
+    else:
+        priors[key] = bilby.core.prior.Beta(
+            minimum=args.min_lorentzian_frequency,
+            maximum=ifo.maximum_frequency,
+            alpha=1,
+            beta=args.nlorentzians,
+            name=key,
+            latex_label=latex
+        )
 
     key = f"{ifo.name}_lorentzian_amplitude_{ii}"
     latex = f"LA{ii}"
     priors[key] = SpikeAndSlab(
         mix=0.5,
-        slab=Uniform(-50, -40),
+        slab=Uniform(-50, -35),
         name=key,
         latex_label=latex)
 
     key = f"{ifo.name}_lorentzian_quality_{ii}"
     latex = f"LQ{ii}"
-    priors[key] = Uniform(
-        -2, 0, key, latex_label=latex)
+    priors[key] = TruncatedNormal(
+        mu=-2, sigma=1, minimum=-2, maximum=1, name=key, latex_label=latex)
 
 farray = np.linspace(ifo.minimum_frequency, ifo.maximum_frequency, 101)
 psd = SplineLorentzianPSD(
@@ -109,7 +104,10 @@ ifo.power_spectral_density = psd
 likelihood = PSDLikelihood(ifo=ifo)
 
 if args.sampler == 'dynesty':
-    sampler_kwargs = dict(dlogz=5, queue_size=args.cpus, n_effective=1000, walks=10, nact=1)
+    sampler_kwargs = dict(
+        dlogz=.5, queue_size=args.cpus, n_effective=1000, walks=50, nact=2)
+elif args.sampler == 'ptemcee':
+    sampler_kwargs = dict(nsamples=1000, ntemps=3, nwalkers=100, nthreads=args.cpus, pos0='minimize')
 else:
     sampler_kwargs = dict()
 

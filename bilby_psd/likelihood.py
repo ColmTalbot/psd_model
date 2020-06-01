@@ -20,10 +20,6 @@ class PSDLikelihood(Likelihood):
         return self.log_likelihood() - self.noise_log_likelihood()
 
     def log_likelihood(self):
-        fdiff = np.diff(self.ifo.power_spectral_density.lorentzian_frequencies)
-        if np.any(fdiff < 0):
-            return -np.nan_to_num(np.inf)
-
         psd = self.psd
         return - np.sum(self.weight * self.data / psd + np.log(2 * np.pi * psd))
 

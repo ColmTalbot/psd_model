@@ -1,12 +1,15 @@
-nsplines = 9
-nlorentzians = 9
+nsplines = 5
+nlorentzians = 10
 detector = H1
-fmax = 512
+fmin = 15
+flmin = 20
+fmax = 600
+flmax = 530
 cpus = 16
 
 universe = vanilla
 executable = /home/gregory.ashton/.conda/envs/bilby-test/bin/python
-request_memory = 4.0 GB
+request_memory = 16.0 GB
 request_cpus = $(cpus)
 getenv = True
 notification = Never
@@ -14,5 +17,5 @@ log = logs/$(detector)_$(fmax)_ns$(nsplines)_nl$(nlorentzians).log
 output = logs/$(detector)_$(fmax)_ns$(nsplines)_nl$(nlorentzians).out
 error = logs/$(detector)_$(fmax)_ns$(nsplines)_nl$(nlorentzians).err
 accounting_group = ligo.dev.o3.cbc.pe.lalinference
-arguments = real_data.py -d $(detector) --max-frequency $(fmax) -s $(nsplines) -l $(nlorentzians) --cpus $(cpus)
+arguments = real_data.py -d $(detector) --min-frequency $(fmin) --max-frequency $(fmax) --min-lorentzian-frequency $(flmin) --max-lorentzian-frequency $(flmax) -s $(nsplines) -l $(nlorentzians) --cpus $(cpus)
 queue
