@@ -1,27 +1,24 @@
-from __future__ import division
-
 from scipy.interpolate import CubicSpline
 import numpy as np
 
-from bilby.core.prior import Prior
 from bilby.gw.detector import PowerSpectralDensity
 
 
 def cauchy(f, f0, gamma):
-    return 1 / np.pi / (1 + ((f - f0) / gamma)**2)
+    return 1 / np.pi / gamma / (1 + ((f - f0) / gamma)**2)
 
 
 class SplineLorentzianPSD(PowerSpectralDensity):
 
     def __init__(self, name, frequency_array, parameters=None):
+        self._spline_cache = dict()
         if parameters is None:
             parameters = dict()
         self.name = name
         self.parameters = parameters
         self.frequency_array = frequency_array
         PowerSpectralDensity.__init__(self, frequency_array=frequency_array)
-        self.psd_array = (self.spline(self.frequency_array) +
-                          self.lorentzian(self.frequency_array))
+        self.psd_array = self._total_psd(frequency_array)
         self._cache['parameters'] = dict()
 
     def _update_cache(self, frequency_array):
@@ -37,22 +34,24 @@ class SplineLorentzianPSD(PowerSpectralDensity):
             return super(SplineLorentzianPSD, self).get_power_spectral_density_array(
                 frequency_array=frequency_array)
         else:
-            return 2 * (self.spline(frequency_array=frequency_array) +
-                        self.lorentzian(frequency_array=frequency_array))
+            return self._total_psd(frequency_array)
 
     def get_amplitude_spectral_density_array(self, frequency_array):
         if self.parameters == self._cache['parameters']:
             return super(SplineLorentzianPSD, self).get_amplitude_spectral_density_array(
                 frequency_array=frequency_array)
         else:
-            return 2 * (self.spline(frequency_array=frequency_array) +
-                        self.lorentzian(frequency_array=frequency_array))
+            return self._total_psd(frequency_array)
 
     @property
     def power_spectral_density_interpolated(self):
-        return lambda frequency_array: 2 * (
-            self.spline(frequency_array=frequency_array) +
-            self.lorentzian(frequency_array=frequency_array))
+        return lambda frequency_array: self._total_psd(frequency_array)
+
+    def _total_psd(self, frequency_array):
+        return 2 * (
+            self.spline(frequency_array=frequency_array)
+            + self.lorentzian(frequency_array=frequency_array)
+        )
 
     @property
     def n_points(self):
@@ -142,11 +141,23 @@ class SplineLorentzianPSD(PowerSpectralDensity):
     def lorentzian_qualities(self):
         return np.array([self.parameters[key] for key in self._lorentzian_qualities_keys])
 
+    @property
+    def spline_interpolant(self):
+        if not (
+            self._spline_cache.get("frequencies", None) == self.spline_frequencies
+            and self._spline_cache.get("amplitudes", None) == self.spline_amplitudes
+            and isinstance(self._spline_cache.get("interpolant", None), CubicSpline)
+        ):
+            self._spline_cache["interpolant"] = CubicSpline(
+                self.spline_frequencies, self.spline_amplitudes
+            )
+            self._spline_cache["frequencies"] = self.spline_frequencies
+            self._spline_cache["amplitudes"] = self.spline_amplitudes
+        return self._spline_cache["interpolant"]
+
     def spline(self, frequency_array):
         if self.n_points > 0:
-            interp = CubicSpline(self.spline_frequencies,
-                                 self.spline_amplitudes)
-            exponent = interp(frequency_array)
+            exponent = self.spline_interpolant(frequency_array)
             return np.power(10, exponent)
         elif self.n_points == 0:
             return np.zeros_like(frequency_array)
@@ -160,38 +171,14 @@ class SplineLorentzianPSD(PowerSpectralDensity):
             ffs = self.lorentzian_frequencies
             lorentzian = np.sum(
                 self._single_lorentzian(
-                    frequency_array[:, np.newaxis], 10.**aas, 10.**qqs, ffs),
+                    frequency_array[:, np.newaxis],
+                    10.**aas * self.spline(ffs),
+                    10.**qqs,
+                    ffs
+                ),
                 axis=-1)
             return lorentzian
 
     @staticmethod
     def _single_lorentzian(frequency_array, amplitude, quality, location):
         return cauchy(f=frequency_array, f0=location, gamma=quality) * amplitude
-
-
-class Discrete(Prior):
-
-    def __init__(self, minimum, maximum, step_size, name=None,
-                 latex_label=None, boundary=None):
-        super(Discrete, self).__init__(
-            name=name, latex_label=latex_label, boundary=boundary)
-        self.minimum = minimum
-        self.maximum = maximum
-        self.step_size = step_size
-        if (maximum - minimum + 1) % step_size != 0:
-            raise ValueError(
-                'maximum - minimum must be an integer multiple of step size')
-
-    @property
-    def n_bins(self):
-        return (self.maximum - self.minimum + 1) / self.step_size
-
-    def prob(self, val):
-        prob = 1 / self.n_bins
-        return prob
-
-    def rescale(self, val):
-        val = np.atleast_1d(val)
-        val *= self.step_size * self.n_bins
-        val += self.minimum
-        return val.astype(int)

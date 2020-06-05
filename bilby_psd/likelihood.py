@@ -7,13 +7,15 @@ from bilby.gw.likelihood import GravitationalWaveTransient
 class PSDLikelihood(Likelihood):
 
     def __init__(self, ifo):
-        Likelihood.__init__(
-            self, parameters=ifo.power_spectral_density.parameters)
+        super(PSDLikelihood, self).__init__(
+            parameters=ifo.power_spectral_density.parameters
+        )
         self.ifo = ifo
         self.data = abs(ifo.frequency_domain_strain[self.ifo.frequency_mask])**2
         self._nll = - sum(self.ifo.frequency_mask) / 2 - np.sum(np.log(
             2 * np.pi * abs(
-                ifo.frequency_domain_strain[self.ifo.frequency_mask])**2))
+                ifo.frequency_domain_strain[self.ifo.frequency_mask])**2)
+        )
         self.weight = 2 / ifo.strain_data.duration
 
     def log_likelihood_ratio(self):
@@ -24,8 +26,8 @@ class PSDLikelihood(Likelihood):
         if np.any(fdiff < 0):
             return -np.nan_to_num(np.inf)
 
-        psd = self.psd
-        return - np.sum(self.weight * self.data / psd + np.log(2 * np.pi * psd))
+        psd = self.psd / self.weight
+        return - np.sum(self.data / psd + np.log(2 * np.pi * psd))
 
     def noise_log_likelihood(self):
         return self._nll
@@ -42,13 +44,19 @@ class PSDLikelihood(Likelihood):
 
 class PSDGravitationalWaveTransient(GravitationalWaveTransient):
 
-    def __init__(self, ifos, wfg, priors=None, distance_marginalization=None,
-                 phase_marginalization=None, time_marginalization=None):
+    def __init__(
+        self, ifos, wfg, priors=None, distance_marginalization=None,
+        phase_marginalization=None, time_marginalization=None,
+        reference_frame="sky", time_reference="geocent"
+    ):
         GravitationalWaveTransient.__init__(
             self, interferometers=ifos, waveform_generator=wfg, priors=priors,
             distance_marginalization=distance_marginalization,
             phase_marginalization=phase_marginalization,
-            time_marginalization=time_marginalization)
+            time_marginalization=time_marginalization,
+            reference_frame=reference_frame,
+            time_reference=time_reference
+        )
         self._nll = np.nan
         for ifo in self.interferometers:
             ifo.power_spectral_density.parameters = self.parameters
