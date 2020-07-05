@@ -1,10 +1,10 @@
-nsplines = 5
-nlorentzians = 10
+nsplines = 7
+nlorentzians = 6
 detector = H1
 fmin = 15
 flmin = 20
 fmax = 600
-flmax = 530
+flmax = 520
 cpus = 16
 
 universe = vanilla

@@ -30,7 +30,7 @@ parser.add_argument('--nlive', type=int, default=500)
 parser.add_argument('--cpus', type=int, default=1)
 args = parser.parse_args()
 
-outdir = f'{args.detector}_{args.max_frequency}'
+outdir = f'{args.detector}_{args.min_frequency}_{args.max_frequency}'
 bilby.core.utils.check_directory_exists_and_if_not_mkdir(outdir)
 label = f'noise_splines{args.nsplines}_lorentzians{args.nlorentzians}'
 
@@ -95,6 +95,29 @@ for ii in range(args.nlorentzians):
     latex = f"LQ{ii}"
     priors[key] = TruncatedNormal(
         mu=-2, sigma=1, minimum=-2, maximum=1, name=key, latex_label=latex)
+
+
+# Set up fixed lorentzian priors
+lines = [35.9, 36.7, 37.3, 60, 120, 180, 331.9]
+ii = args.nlorentzians
+for line in lines:
+    key = f"{ifo.name}_lorentzian_frequency_{ii}"
+    latex = f"fixed_LF{ii}"
+    priors[key] = line
+
+    key = f"{ifo.name}_lorentzian_amplitude_{ii}"
+    latex = f"LA{ii}"
+    priors[key] = SpikeAndSlab(
+        mix=0.5,
+        slab=Uniform(-50, -35),
+        name=key,
+        latex_label=latex)
+
+    key = f"{ifo.name}_lorentzian_quality_{ii}"
+    latex = f"LQ{ii}"
+    priors[key] = TruncatedNormal(
+        mu=-2, sigma=1, minimum=-2, maximum=1, name=key, latex_label=latex)
+    ii += 1
 
 farray = np.linspace(ifo.minimum_frequency, ifo.maximum_frequency, 101)
 psd = SplineLorentzianPSD(

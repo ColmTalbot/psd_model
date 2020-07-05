@@ -11,4 +11,7 @@ setup(name='bilby_psd',
       version=VERSION,
       packages=['bilby_psd'],
       package_dir={'bilby_psd': 'bilby_psd'},
+      entry_points={'console_scripts':
+                    ['bilby_psd=bilby_psd.psd:main']
+                    },
       python_requires='>=3.5')
