@@ -14,10 +14,10 @@ from bilby_psd.likelihood import PSDLikelihood
 from bilby_psd.priors_defs import SpikeAndSlab, MinimumPrior
 
 
-def get_quality_prior(args, key, ii):
+def get_gamma_prior(args, key, ii):
     latex_label = f"LQ{ii}"
     return Uniform(
-        minimum=args.quality_min, maximum=args.quality_max, name=key, latex_label=latex_label)
+        minimum=args.gamma_min, maximum=args.gamma_max, name=key, latex_label=latex_label)
 
 
 def get_amplitude_prior(args, key, ii):
@@ -27,6 +27,31 @@ def get_amplitude_prior(args, key, ii):
         slab=Uniform(args.lorentzian_min, args.lorentzian_max),
         name=key,
         latex_label=latex)
+
+
+def plot_data_and_psd_prior(ifo, priors, outdir, label):
+    fig, ax = plt.subplots()
+
+    df = ifo.strain_data.frequency_array[1] - ifo.strain_data.frequency_array[0]
+    asd = bilby.gw.utils.asd_from_freq_series(
+        freq_data=ifo.strain_data.frequency_domain_strain, df=df)
+
+    freq = ifo.strain_data.frequency_array[ifo.strain_data.frequency_mask]
+    ax.loglog(freq, asd[ifo.strain_data.frequency_mask],
+              color='C0', label=ifo.name)
+
+    N = 1000
+    prior_draws = np.zeros((N, len(freq)))
+    for ii in range(N):
+        ifo.power_spectral_density.parameters.update(priors.sample())
+        prior_draws[ii] = ifo.amplitude_spectral_density_array[ifo.strain_data.frequency_mask]
+        ax.loglog(freq, prior_draws[ii], color='C1', lw=0.5, alpha=0.1, zorder=-100)
+
+    ax.grid(True)
+    ax.set_ylabel(r'Strain [strain/$\sqrt{\rm Hz}$]')
+    ax.set_xlabel(r'Frequency [Hz]')
+    fig.tight_layout()
+    fig.savefig(f"{outdir}/{label}_data_and_prior")
 
 
 def main():
@@ -45,8 +70,8 @@ def main():
     parser.add_argument('--buffer-frequency', type=int, default=5)
     parser.add_argument('--spline-min', default=-57, type=int)
     parser.add_argument('--spline-max', default=-32, type=int)
-    parser.add_argument('--quality-min', default=-6, type=float)
-    parser.add_argument('--quality-max', default=0, type=float)
+    parser.add_argument('--gamma-min', default=-6, type=float)
+    parser.add_argument('--gamma-max', default=0, type=float)
     parser.add_argument('--lorentzian-min', default=-50, type=int)
     parser.add_argument('--lorentzian-max', default=-30, type=int)
     parser.add_argument('--lorentzian-mix', default=0.1, type=float)
@@ -81,8 +106,9 @@ def main():
             args.minimum_frequency,
             args.maximum_frequency)
         label += f"_file{len(file_line_list.get_fmin_fmax_list())}"
+        fmin_fmax_list = file_line_list.get_fmin_fmax_list()
     else:
-        file_line_list = []
+        fmin_fmax_list = []
 
     # Read in the data
     post_trigger_duration = 2
@@ -112,7 +138,7 @@ def main():
         priors[key] = Uniform(args.spline_min, args.spline_max, key, latex_label=latex)
 
     # Set up floating lorentzian priors
-    floating_lorentzian_keys = dict(frequency=[], amplitude=[], quality=[])
+    floating_lorentzian_keys = dict(frequency=[], amplitude=[], gamma=[])
     for ii in range(args.nlorentzians):
         key = f"{ifo.name}_lorentzian_frequency_{ii}"
         latex = f"LF{ii}"
@@ -125,6 +151,8 @@ def main():
                 name=key,
                 latex_label=latex
             )
+            # Hack to fix the class naming
+            priors[key].__class__.__name__ = "MinimumPrior"
         else:
             priors[key] = bilby.core.prior.Beta(
                 minimum=args.minimum_frequency,
@@ -140,16 +168,16 @@ def main():
         priors[key] = get_amplitude_prior(args, key, ii)
         floating_lorentzian_keys["amplitude"].append(key)
 
-        key = f"{ifo.name}_lorentzian_quality_{ii}"
-        priors[key] = get_quality_prior(args, key, ii)
-        floating_lorentzian_keys["quality"].append(key)
+        key = f"{ifo.name}_lorentzian_gamma_{ii}"
+        priors[key] = get_gamma_prior(args, key, ii)
+        floating_lorentzian_keys["gamma"].append(key)
 
     # Set up fixed lorentzian priors
     lines = [
         line for line in args.fixed_lorentzians
         if ifo.minimum_frequency < line < ifo.maximum_frequency]
     line_width = args.fixed_lorentzians_uncertainty / 2
-    fixed_lorentzian_keys = dict(frequency=[], amplitude=[], quality=[])
+    fixed_lorentzian_keys = dict(frequency=[], amplitude=[], gamma=[])
     ii = args.nlorentzians
     for line in lines:
         key = f"{ifo.name}_lorentzian_frequency_{ii}"
@@ -164,13 +192,14 @@ def main():
         priors[key] = get_amplitude_prior(args, key, ii)
         fixed_lorentzian_keys["amplitude"].append(key)
 
-        key = f"{ifo.name}_lorentzian_quality_{ii}"
-        priors[key] = get_quality_prior(args, key, ii)
-        fixed_lorentzian_keys["quality"].append(key)
+        key = f"{ifo.name}_lorentzian_gamma_{ii}"
+        priors[key] = get_gamma_prior(args, key, ii)
+        fixed_lorentzian_keys["gamma"].append(key)
+        ii += 1
 
     ii = args.nlorentzians + args.nlorentzians_fixed
-    fixed_lorentzian_file_keys = dict(frequency=[], amplitude=[], quality=[])
-    for fmin, fmax in file_line_list.get_fmin_fmax_list():
+    fixed_lorentzian_file_keys = dict(frequency=[], amplitude=[], gamma=[])
+    for fmin, fmax in fmin_fmax_list:
         key = f"{ifo.name}_lorentzian_frequency_{ii}"
         latex = f"file_LF{ii}"
         priors[key] = Uniform(
@@ -183,9 +212,9 @@ def main():
         priors[key] = get_amplitude_prior(args, key, ii)
         fixed_lorentzian_file_keys["amplitude"].append(key)
 
-        key = f"{ifo.name}_lorentzian_quality_{ii}"
-        priors[key] = get_quality_prior(args, key, ii)
-        fixed_lorentzian_file_keys["quality"].append(key)
+        key = f"{ifo.name}_lorentzian_gamma_{ii}"
+        priors[key] = get_gamma_prior(args, key, ii)
+        fixed_lorentzian_file_keys["gamma"].append(key)
 
         ii += 1
 
@@ -195,6 +224,8 @@ def main():
 
     ifo.power_spectral_density = psd
     likelihood = PSDLikelihood(ifo=ifo)
+
+    plot_data_and_psd_prior(ifo, priors, outdir, label)
 
     if args.sampler == 'dynesty':
         sampler_kwargs = dict(

@@ -21,7 +21,8 @@ class PSDLikelihood(Likelihood):
 
     def log_likelihood(self):
         psd = self.psd
-        return - np.sum(self.weight * self.data / psd + np.log(2 * np.pi * psd))
+        logl = - np.sum(self.weight * self.data / psd + np.log(2 * np.pi * psd))
+        return np.nan_to_num(logl)
 
     def noise_log_likelihood(self):
         return self._nll

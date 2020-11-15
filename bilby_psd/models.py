@@ -11,6 +11,21 @@ def cauchy(f, f0, gamma):
     return 1 / np.pi / (1 + ((f - f0) / gamma)**2)
 
 
+def z_function(f, f0):
+    fprime = np.abs(f - f0)
+    df = f0 / 50
+    z = np.ones_like(fprime)
+    idxs = fprime > df
+    z[idxs] = np.exp(- (fprime - df) / df)[idxs]
+    return z
+
+
+def Lambda(f, f0, gamma):
+    z = z_function(f, f0)
+    denom = (f0 * f) ** 2 + ((f0 ** 2 - f ** 2) / gamma) ** 2
+    return z * f0 ** 4 / denom
+
+
 class SplineLorentzianPSD(PowerSpectralDensity):
 
     def __init__(self, name, frequency_array, parameters=None):
@@ -20,8 +35,7 @@ class SplineLorentzianPSD(PowerSpectralDensity):
         self.parameters = parameters
         self.frequency_array = frequency_array
         PowerSpectralDensity.__init__(self, frequency_array=frequency_array)
-        self.psd_array = (self.spline(self.frequency_array) +
-                          self.lorentzian(self.frequency_array))
+        self.psd_array = (self.spline(self.frequency_array) + self.lorentzian(self.frequency_array))
         self._cache['parameters'] = dict()
 
     def _update_cache(self, frequency_array):
@@ -45,8 +59,7 @@ class SplineLorentzianPSD(PowerSpectralDensity):
             return super(SplineLorentzianPSD, self).get_amplitude_spectral_density_array(
                 frequency_array=frequency_array)
         else:
-            return 2 * (self.spline(frequency_array=frequency_array) +
-                        self.lorentzian(frequency_array=frequency_array))
+            return np.sqrt(self.get_power_spectral_density_array(frequency_array))
 
     @property
     def power_spectral_density_interpolated(self):
@@ -129,18 +142,18 @@ class SplineLorentzianPSD(PowerSpectralDensity):
         return np.array([self.parameters[key] for key in self._lorentzian_amplitudes_keys])
 
     @property
-    def _lorentzian_qualities_keys(self):
+    def _lorentzian_gamma_keys(self):
         try:
-            self.__lorentzians_qualities_keys = [
-                '{}_lorentzian_quality_{}'.format(self.name, ii)
+            self.__lorentzians_gamma_keys = [
+                '{}_lorentzian_gamma_{}'.format(self.name, ii)
                 for ii in range(self.n_lorentzians)]
-            return self.__lorentzians_qualities_keys
+            return self.__lorentzians_gamma_keys
         except AttributeError:
             return None
 
     @property
-    def lorentzian_qualities(self):
-        return np.array([self.parameters[key] for key in self._lorentzian_qualities_keys])
+    def lorentzian_gamma(self):
+        return np.array([self.parameters[key] for key in self._lorentzian_gamma_keys])
 
     def spline(self, frequency_array):
         if self.n_points > 0:
@@ -156,17 +169,17 @@ class SplineLorentzianPSD(PowerSpectralDensity):
             return 0 * frequency_array
         else:
             aas = self.lorentzian_amplitudes
-            qqs = self.lorentzian_qualities
+            qqs = self.lorentzian_gamma
             ffs = self.lorentzian_frequencies
             lorentzian = np.sum(
                 self._single_lorentzian(
-                    frequency_array[:, np.newaxis], 10.**aas, 10.**qqs, ffs),
+                    frequency_array[:, np.newaxis], 10.**aas, 10 ** qqs, ffs),
                 axis=-1)
             return lorentzian
 
     @staticmethod
-    def _single_lorentzian(frequency_array, amplitude, quality, location):
-        return cauchy(f=frequency_array, f0=location, gamma=quality) * amplitude
+    def _single_lorentzian(frequency_array, amplitude, gamma, location):
+        return Lambda(f=frequency_array, f0=location, gamma=gamma) * amplitude
 
 
 class Discrete(Prior):
