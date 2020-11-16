@@ -7,6 +7,7 @@ from bilby.core.prior import Uniform
 from bilby_pipe.utils import convert_string_to_dict
 import matplotlib.pyplot as plt
 from gwpy.timeseries import TimeSeries
+from scipy.signal import find_peaks
 
 from bilby_psd.models import SplineLorentzianPSD
 from bilby_psd.lines import LineList
@@ -64,6 +65,10 @@ def main():
     parser.add_argument('--fixed-lorentzians-file', type=str, default=None)
     parser.add_argument('--fixed-lorentzians', action="append", type=float, default=[])
     parser.add_argument('--fixed-lorentzians-uncertainty', type=float, default=0.5)
+    parser.add_argument('--find-peaks', action="store_true")
+    parser.add_argument('--find-peaks-prominence', default=4, type=int)
+    parser.add_argument('--find-peaks-width', default=2, type=float)
+    parser.add_argument('--find-peaks-max', default=5, type=int)
     parser.add_argument('-d', '--detector', type=str, required=True)
     parser.add_argument('--maximum-frequency', type=int, default=512)
     parser.add_argument('--minimum-frequency', type=int, default=15)
@@ -109,6 +114,8 @@ def main():
         fmin_fmax_list = file_line_list.get_fmin_fmax_list()
     else:
         fmin_fmax_list = []
+    if args.find_peaks:
+        label += f"_fp{args.find_peaks_prominence}-{args.find_peaks_max}-{args.find_peaks_width}"
 
     # Read in the data
     post_trigger_duration = 2
@@ -218,6 +225,37 @@ def main():
 
         ii += 1
 
+    # Set up peak-found lorentzian priors
+    data = np.log(np.abs(ifo.frequency_domain_strain[ifo.frequency_mask]))
+    peaks_idxs, properties = find_peaks(
+        data, prominence=args.find_peaks_prominence
+    )
+    if len(peaks_idxs) > args.find_peaks_max:
+        peaks_idxs = peaks_idxs[np.argsort(properties['prominences'])]
+        peaks_idxs = peaks_idxs[::-1]
+        peaks_idxs = peaks_idxs[:args.find_peaks_max]
+
+    find_peaks_lorentzian_keys = dict(frequency=[], amplitude=[], gamma=[])
+    for peak in ifo.frequency_array[ifo.frequency_mask][peaks_idxs]:
+        key = f"{ifo.name}_lorentzian_frequency_{ii}"
+        latex = f"find-peak_LF{ii}"
+        priors[key] = Uniform(
+            minimum=peak - args.find_peaks_width / 2,
+            maximum=peak + args.find_peaks_width / 2,
+            name=key, latex_label=latex
+        )
+        find_peaks_lorentzian_keys["frequency"].append(key)
+
+        key = f"{ifo.name}_lorentzian_amplitude_{ii}"
+        priors[key] = get_amplitude_prior(args, key, ii)
+        find_peaks_lorentzian_keys["amplitude"].append(key)
+
+        key = f"{ifo.name}_lorentzian_gamma_{ii}"
+        priors[key] = get_gamma_prior(args, key, ii)
+        find_peaks_lorentzian_keys["gamma"].append(key)
+
+        ii += 1
+
     farray = np.linspace(ifo.minimum_frequency, ifo.maximum_frequency, 101)
     psd = SplineLorentzianPSD(
         f'{ifo.name}', farray, parameters=priors.sample())
@@ -256,6 +294,12 @@ def main():
 
     if args.fixed_lorentzians_file:
         for name, keys in fixed_lorentzian_file_keys.items():
+            result.plot_corner(
+                keys,
+                filename=f"{outdir}/{label}_file_lorentzian_{name}_corner")
+
+    if args.find_peaks:
+        for name, keys in find_peaks_lorentzian_keys.items():
             result.plot_corner(
                 keys,
                 filename=f"{outdir}/{label}_file_lorentzian_{name}_corner")
