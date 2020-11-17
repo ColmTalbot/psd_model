@@ -51,8 +51,8 @@ class SplineLorentzianPSD(PowerSpectralDensity):
             return super(SplineLorentzianPSD, self).get_power_spectral_density_array(
                 frequency_array=frequency_array)
         else:
-            return 2 * (self.spline(frequency_array=frequency_array) +
-                        self.lorentzian(frequency_array=frequency_array))
+            return (self.spline(frequency_array=frequency_array) +
+                    self.lorentzian(frequency_array=frequency_array))
 
     def get_amplitude_spectral_density_array(self, frequency_array):
         if self.parameters == self._cache['parameters']:
@@ -102,7 +102,7 @@ class SplineLorentzianPSD(PowerSpectralDensity):
 
     @property
     def spline_amplitudes(self):
-        return [self.parameters[key] for key in self._spline_amplitude_keys]
+        return [2 * self.parameters[key] for key in self._spline_amplitude_keys]
 
     @property
     def n_lorentzians(self):
@@ -173,7 +173,7 @@ class SplineLorentzianPSD(PowerSpectralDensity):
             ffs = self.lorentzian_frequencies
             lorentzian = np.sum(
                 self._single_lorentzian(
-                    frequency_array[:, np.newaxis], 10.**aas, 10 ** qqs, ffs),
+                    frequency_array[:, np.newaxis], 10.**(2 * aas), 10 ** qqs, ffs),
                 axis=-1)
             return lorentzian
 
