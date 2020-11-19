@@ -3,7 +3,7 @@ import configargparse
 
 import numpy as np
 import bilby
-from bilby.core.prior import Uniform
+from bilby.core.prior import Uniform, PowerLaw
 from bilby_pipe.utils import convert_string_to_dict
 import matplotlib.pyplot as plt
 from gwpy.timeseries import TimeSeries
@@ -17,8 +17,12 @@ from bilby_psd.priors_defs import SpikeAndSlab, MinimumPrior
 
 def get_gamma_prior(args, key, ii):
     latex_label = f"LQ{ii}"
-    return Uniform(
-        minimum=args.gamma_min, maximum=args.gamma_max, name=key, latex_label=latex_label)
+    return PowerLaw(
+        alpha=0,
+        minimum=args.gamma_min,
+        maximum=args.gamma_max,
+        name=key,
+        latex_label=latex_label)
 
 
 def get_amplitude_prior(args, key, ii):
