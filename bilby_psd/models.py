@@ -28,7 +28,7 @@ def Lambda(f, f0, gamma):
 
 class SplineLorentzianPSD(PowerSpectralDensity):
 
-    def __init__(self, name, frequency_array, parameters=None):
+    def __init__(self, name, frequency_array, notches=[], parameters=None):
         if parameters is None:
             parameters = dict()
         self.name = name

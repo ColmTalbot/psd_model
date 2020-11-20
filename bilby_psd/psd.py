@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 import configargparse
+import ast
 
 import numpy as np
 import bilby
 from bilby.core.prior import Uniform, PowerLaw
-from bilby_pipe.utils import convert_string_to_dict
+from bilby_pipe.utils import convert_string_to_dict, convert_string_to_tuple
+from bilby_pipe.bilbyargparser import BilbyArgParser
 import matplotlib.pyplot as plt
 from gwpy.timeseries import TimeSeries
 from scipy.signal import find_peaks
@@ -13,6 +15,14 @@ from bilby_psd.models import SplineLorentzianPSD
 from bilby_psd.lines import LineList
 from bilby_psd.likelihood import PSDLikelihood
 from bilby_psd.priors_defs import SpikeAndSlab, MinimumPrior
+
+
+def convert_notch_list(notch_list):
+    notch_tuples = ast.literal_eval(notch_list)
+    if isinstance(notch_tuples[0], (float, int)):
+        return [(notch_tuples)]
+    else:
+        return list(notch_tuples)
 
 
 def get_gamma_prior(args, key, ii):
@@ -60,7 +70,7 @@ def plot_data_and_psd_prior(ifo, priors, outdir, label):
 
 
 def main():
-    parser = configargparse.ArgParser()
+    parser = BilbyArgParser(formatter_class=configargparse.ArgumentDefaultsHelpFormatter)
     parser.add('config', is_config_file=True, help='config file path')
     parser.add_argument('--trigger-time', type=float, required=True)
     parser.add_argument('--duration', default=4, type=int)
@@ -76,6 +86,8 @@ def main():
     parser.add_argument('-d', '--detector', type=str, required=True)
     parser.add_argument('--maximum-frequency', type=int, default=512)
     parser.add_argument('--minimum-frequency', type=int, default=15)
+    parser.add_argument('--notch-list', type=str, default=None,
+                        help="Use (), i.e. ((110, 112), (200, 201))")
     parser.add_argument('--buffer-frequency', type=int, default=5)
     parser.add_argument('--spline-min', default=-57, type=int)
     parser.add_argument('--spline-max', default=-32, type=int)
@@ -118,6 +130,11 @@ def main():
         fmin_fmax_list = file_line_list.get_fmin_fmax_list()
     else:
         fmin_fmax_list = []
+    if args.notch_list  is not None:
+        notch_list = convert_notch_list(args.notch_list)
+        label += "_notched" + "_".join([f"{a}-{b}" for a, b in notch_list])
+    else:
+        notch_list = None
     if args.find_peaks:
         label += f"_fp{args.find_peaks_prominence}-{args.find_peaks_max}-{args.find_peaks_width}"
 
@@ -134,6 +151,7 @@ def main():
     ifo.set_strain_data_from_gwpy_timeseries(analysis_data)
     ifo.minimum_frequency = args.minimum_frequency - args.buffer_frequency
     ifo.maximum_frequency = args.maximum_frequency + args.buffer_frequency
+    ifo.strain_data.notch_list = notch_list
 
     # Set up spline priors
     fixed_spline_points = np.logspace(
