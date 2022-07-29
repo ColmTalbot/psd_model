@@ -117,10 +117,38 @@ class MaximumPrior(ConditionalBeta):
 
     def rescale(self, val, **required_variables):
         self.update_conditions(**required_variables)
-        if self.alpha < 1:
-            return self.minimum
+        if isinstance(val, (float, int)) or val.size == 1:
+            if self.alpha < 1:
+                return self.minimum
+            else:
+                return super(MaximumPrior, self).rescale(float(val))
         else:
-            return super(MaximumPrior, self).rescale(val)
+            from scipy.special import btdtri
+            # print(self.alpha, self.beta, val, self.minimum, self.maximum)
+            below = self.alpha < 1
+            output = np.zeros(self.alpha.shape)
+            output[below] = self.minimum
+            if isinstance(self.alpha, (float, int)):
+                alpha_ = self.alpha
+            else:
+                alpha_ = self.alpha[~below]
+            if isinstance(self.beta, (float, int)):
+                beta_ = self.beta
+            else:
+                beta_ = self.beta[~below]
+            if isinstance(self.maximum, (float, int)):
+                max_ = self.maximum
+            else:
+                max_ = self.maximum[~below]
+            if isinstance(self.minimum, (float, int)):
+                min_ = self.minimum
+            else:
+                min_ = self.minimum[~below]
+            output[~below] = (
+                btdtri(alpha_, beta_, val[~below])
+                * (max_ - min_) + min_
+            )
+            return output
 
     def __repr__(self):
         return Prior.__repr__(self)

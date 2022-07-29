@@ -3,7 +3,8 @@ from scipy.special import logsumexp
 
 from bilby.core.likelihood import Likelihood
 from bilby.gw.likelihood import GravitationalWaveTransient
-from pygwb.spectral import coarse_grain
+
+from .coarsen import coarse_grain
 
 
 class PSDLikelihood(Likelihood):
